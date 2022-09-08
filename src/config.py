@@ -7,5 +7,6 @@
 ###############################################################################
 
 params = {
-    'raw_input_file_path': 'src/data/',
+    'input_data_file_path': 'src/data/',
+    'database_url': 'sqlite:///hmc-sqlite.db',
 }
