@@ -8,13 +8,15 @@
 # auto-sending of emails.
 ###############################################################################
 import os
+import sys
 import datetime
 import pandas as pd 
 from sqlalchemy.orm import sessionmaker
 
 from config import params
 from db import db_init, ClientStatus, ClientContactInfo, ClientContactHistory, AgingReport
-from utils import process_aging_report, process_contact_info
+from utils import process_aging_report, process_contact_info, send_email_without_attachments
+from assets.errors import data_processing_error
 
 
 # AUTHENTICATE
@@ -29,12 +31,33 @@ date_processed = datetime.date.today()    # identify the current time at time of
 
 for filename in os.listdir(params['input_data_file_path']):    # FIXME: convert to cloud folder drop
 
+    # Update Contact Info
     if 'Contact' in filename:    # assumes the contact info in cloud folder is latest, drop current table and replace 
-        print('Processing {}...'.format(filename))
-        new_contact_info_df = process_contact_info(pd.read_excel(params['input_data_file_path'] + filename))
-        new_contact_info_df.columns = ['client_id', 'name', 'email', 'phone']    # format columns properly for db commit
-        new_contact_info_df.to_sql('ClientContactInfo', con=engine, if_exists='replace', index=False)
 
+            print('Processing {}...'.format(filename))
+
+            try:
+                new_contact_info_df = process_contact_info(pd.read_excel(params['input_data_file_path'] + filename))
+                new_contact_info_df.columns = ['client_id', 'name', 'email', 'phone']    # format columns properly for db commit
+                new_contact_info_df.to_sql('ClientContactInfo', con=engine, if_exists='replace', index=False)
+                print('The contact info in {} was processed successfully.'.format(filename))
+                send_email_without_attachments(
+                    data_processing_error['subject'],
+                    data_processing_error['body'],
+                    data_processing_error['footer'],
+                )
+
+            except Exception as e:
+                print('There was an error while processing the contact info in {}'.format(filename))
+                send_email_without_attachments(
+                    data_processing_error['subject'],
+                    data_processing_error['body'],
+                    data_processing_error['footer'],
+                )
+                sys.exit()
+
+
+    # Process Aging Report(s)
     elif 'AR' in filename:  # identify whether anynew aging reports need to be processed
         print('Processing {}...'.format(filename))
         # if AR doesn't exist... (based on filename...)
@@ -61,7 +84,6 @@ for filename in os.listdir(params['input_data_file_path']):    # FIXME: convert 
 # TODO
 # process aging reports
 # use contact logic to process latest db aging report from list
-# implement auto email contact (write email scripts)
 # transfer to cloud (run every day at X AM... search cloud storage for latest AR file... process to update contact history, etc..., if no problems just keep going on last one)
 # testing... (multiple AR's, duplicate clients, dropping files into the cloud, etc.)
 # create dashboard... (react? sheets? what metrics?)
